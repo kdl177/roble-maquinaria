@@ -1364,3 +1364,15 @@ dominio a secas (`https://`), y el aviso en `acceso.html`, sin errores de JavaSc
   falta una cuenta de pruebas autorizada.
 - Categorías, usuarios, contenidos, configuración, solicitudes, vendedores y pedidos del admin siguen siendo solo
   del navegador (lo avisa la propia página).
+
+## 43. Correo sin dominio propio: envío por SMTP (15 de octubre de 2026)
+
+Resend no exige plan de pago para escribir a cualquiera (gratis: 3.000 al mes, 100 al día); exige verificar un dominio
+propio, y `vercel.app` no se puede. Hasta tenerlo, con `onboarding@resend.dev` solo llega correo a la cuenta dueña de
+Resend: códigos de contraseña, avisos de contacto y de moderación no le llegaban a nadie más. `api/_correo.js` admite
+ahora SMTP (`nodemailer`): con `SMTP_USER` y `SMTP_PASS` puestas en Vercel se envía por SMTP —por defecto Gmail con
+contraseña de aplicación, 500 al día— y si no, por Resend como antes. Al verificar el dominio se quitan las dos
+variables y vuelve a Resend sin tocar código.
+
+Comprobado: envío real de `enviaCodigo` por Gmail SMTP y recepción en la bandeja (texto y HTML, remitente «ROBLE»);
+sin variables responde `sin-clave`; con solo `RESEND_API_KEY` va a Resend como antes; QA local 113/113.
