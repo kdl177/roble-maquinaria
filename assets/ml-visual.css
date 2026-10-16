@@ -413,18 +413,19 @@ p a, span a, li a, dd a, figcaption a, label a, b a, h3 a { padding-top: 5px; pa
 @media (prefers-reduced-motion: no-preference) {
   .js [data-reveal] { transform: translateY(34px) scale(.96); }
   .js [data-reveal].is-in { transform: none; }
-  .js #main { animation: page-in .6s cubic-bezier(.2,.7,.2,1) both; }
+  .js #main:not([data-prerender]) { animation: page-in .6s cubic-bezier(.2,.7,.2,1) both; }
   @keyframes page-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
   /* Hero: zoom de la foto, barrido de luz, título palabra a palabra, buscador después */
-  .hero-photo img { animation: hero-zoom 14s cubic-bezier(.2,.6,.2,1) both; transform-origin: 60% 40%; }
+  /* --ya: con HTML generado, lo que ya lleva animado al repintar el JS (ml.js efectos); sin él, 0. */
+  .hero-photo img { animation: hero-zoom 14s cubic-bezier(.2,.6,.2,1) calc(0ms - var(--ya, 0ms)) both; transform-origin: 60% 40%; }
   @keyframes hero-zoom { from { transform: scale(1.16); } to { transform: scale(1); } }
-  .hero-photo::before { content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none; background: linear-gradient(105deg, transparent 38%, rgba(255,255,255,.22) 50%, transparent 62%); background-size: 260% 100%; animation: hero-luz 2.2s cubic-bezier(.4,0,.2,1) .5s both; }
+  .hero-photo::before { content: ""; position: absolute; inset: 0; z-index: 2; pointer-events: none; background: linear-gradient(105deg, transparent 38%, rgba(255,255,255,.22) 50%, transparent 62%); background-size: 260% 100%; animation: hero-luz 2.2s cubic-bezier(.4,0,.2,1) calc(500ms - var(--ya, 0ms)) both; }
   @keyframes hero-luz { from { background-position: 130% 0; } to { background-position: -130% 0; } }
-  .js .hero-photo .h1 .w { display: inline-block; animation: w-in .75s cubic-bezier(.2,.7,.2,1) both; animation-delay: calc(var(--i) * 65ms + 120ms); }
+  .hero-photo .h1 .w { display: inline-block; animation: w-in .75s cubic-bezier(.2,.7,.2,1) both; animation-delay: calc(var(--i) * 65ms + 120ms - var(--ya, 0ms)); }
   @keyframes w-in { from { opacity: 0; transform: translateY(28px) rotate(1.5deg); } to { opacity: 1; transform: none; } }
-  .js .hero-photo .search { animation: w-in .75s cubic-bezier(.2,.7,.2,1) .75s both; }
+  .hero-photo .search { animation: w-in .75s cubic-bezier(.2,.7,.2,1) calc(750ms - var(--ya, 0ms)) both; }
   /* Rótulos: el cuadrito gira al aparecer y una raya roja crece bajo el título de cada sección */
-  .js .label .sq, .js .kicker .sq { animation: sq-in .7s cubic-bezier(.2,.7,.2,1) both; }
+  .js .label .sq, .js .kicker .sq { animation: sq-in .7s cubic-bezier(.2,.7,.2,1) calc(0ms - var(--ya, 0ms)) both; }
   @keyframes sq-in { from { transform: scale(0) rotate(90deg); } to { transform: none; } }
   .section-head .h2 { position: relative; display: inline-block; padding-bottom: 8px; }
   .section-head .h2::after { content: ""; position: absolute; left: 0; bottom: 0; height: 3px; width: 0; background: var(--red); transition: width .8s cubic-bezier(.2,.7,.2,1) .2s; }

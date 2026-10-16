@@ -1364,3 +1364,40 @@ dominio a secas (`https://`), y el aviso en `acceso.html`, sin errores de JavaSc
   falta una cuenta de pruebas autorizada.
 - Categorías, usuarios, contenidos, configuración, solicitudes, vendedores y pedidos del admin siguen siendo solo
   del navegador (lo avisa la propia página).
+
+## 43. HTML generado antes del despliegue (15 de octubre de 2026)
+
+Decisión pendiente de `contexto.md` §7 («cómo se pinta el HTML»), tomada por el propietario el 14-10: se genera
+antes. Alcance: las 9 páginas fijas (`index`, `directorio`, `buscar`, `empresas`, `vendedores`, `productos`,
+`guias`, `paquetes`, `vender`). Las fichas con `?id` (anuncio, empresa, producto, vendedor, sector, guía) siguen
+pintándose en el navegador: Vercel no sirve un archivo por consulta, y generarlas exige cambiar las URL (propuesta
+de URL limpias de §7, sin decidir).
+
+- **`scripts/prerender.py`** (`npm run prerender`): sirve los archivos locales, deja que `/api/*` vaya a producción,
+  abre cada página con Playwright a 1280 px y vuelca cabecera, `<main>` y pie dentro del propio archivo entre
+  `<!--prerender-->` y `<!--/prerender-->`. Quita las marcas de los efectos (`data-reveal`, `is-in`, el panel del menú
+  móvil) y deja las cifras con su número final. Idempotente: siempre genera desde el `<main>` vacío. **No se llama
+  `build`**: Vercel ejecuta solo un script con ese nombre en su máquina, sin Python ni Playwright, y el primer
+  despliegue falló así.
+- **`ML.shell()`** detecta `main[data-prerender]`, retira la cabecera y el pie generados y vuelve a pintar con datos
+  frescos (mismo markup: el cambio no se ve). Los listeners y los filtros siguen funcionando como siempre.
+- **Efectos sin reinicios.** Primera versión: al llegar el JS, `.js #main { animation: page-in }` volvía a poner la
+  página a opacidad 0 y la hacía reaparecer (un parpadeo; además Lighthouse tomaba el logotipo repintado como LCP y
+  la portada bajó de 98 a 91). Ahora `#main[data-prerender]` no hace fundido; lo que ya se veía no se marca para
+  aparecer; el título del hero llega partido en palabras en el HTML y anima desde el primer pintado, sin JS; y
+  `--ya` (milisegundos desde el primer pintado, en `:root`) adelanta las animaciones de los elementos repintados
+  (zoom y barrido del hero, palabras, buscador, cuadritos) para que sigan donde iban. Medido fotograma a fotograma con
+  la API a 0 s y a 1,2 s: ni las palabras ni el buscador vuelven a apagarse; `#main` no baja de opacidad 1.
+- Sin JavaScript, las 9 páginas se ven enteras (cabecera, contenido y pie), y los buscadores que no ejecutan JS
+  reciben el contenido.
+
+Lighthouse móvil en producción (antes → después; la nota varía ±4 entre pasadas): directorio 89 → 95, portada
+98/89 → 92–96, buscar 99 → 95, empresas 98 → 97, vendedores 97 → 96; accesibilidad, buenas prácticas y SEO 100 en
+todas. El LCP ya es el elemento correcto (la foto del hero, la primera tarjeta) y no el repintado. Comprobado en
+producción: 9 páginas × 390 y 1280 px con una cabecera, un pie, nada oculto en el primer pantallazo y sin desbordes;
+menú móvil tras el repintado; suites `efectos`, `pedir`, `local`, `nombres`, `fotos` y `packs` con 0 fallos; QA
+113/113.
+
+**Regla nueva:** antes de cada `vercel deploy --prod`, `npm run prerender` (y commit de los HTML). Si se despliega sin
+regenerar, la web funciona igual pero enseña el markup viejo hasta que carga el JS: un salto visible si ha cambiado
+una plantilla de `ml.js` o `roble.js`.

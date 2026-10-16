@@ -284,9 +284,12 @@ window.ML = (function () {
   /* Efectos (10-10): aparición escalonada al entrar en pantalla, cabecera con sombra al hacer scroll y
      contadores del hero. Con «reducir movimiento» no se hace nada; sin JavaScript no se oculta nada
      (las reglas CSS cuelgan de html.js y de [data-reveal], que solo pone este código). */
-  function efectos() {
+  function efectos(pre) {
     document.documentElement.classList.add('js');
     const quieto = matchMedia('(prefers-reduced-motion: reduce)').matches;   // con «reducir movimiento»: solo fundidos (CSS), sin contadores ni título por palabras
+    /* HTML generado: las animaciones de entrada empezaron con el primer pintado. Al repintar, --ya las adelanta lo
+       ya transcurrido para que sigan donde iban en vez de volver a empezar (ml-visual.css). */
+    if (pre) { const fcp = performance.getEntriesByName('first-contentful-paint')[0]; document.documentElement.style.setProperty('--ya', Math.round(performance.now() - (fcp ? fcp.startTime : 0)) + 'ms'); }
     const SEL = '.section-head, .banner-cta, .acard, .ctile, .vend-plate, .pcard, .banner, .pack, .gcard, .paso, .razon, .plan, .dtile, .sector-row, .stile, .cred, .plate, .result';
     const io = new IntersectionObserver(es => es.forEach(e => {
       if (!e.isIntersecting) return;
@@ -296,8 +299,10 @@ window.ML = (function () {
     /* Hero: título palabra a palabra y contadores. Se pintan después de shell(), así que se adornan al aparecer. */
     const adorna = root => {
       if (quieto || !root.querySelectorAll) return;
+      // Con HTML generado, las cifras ya se veían: no se cuentan desde cero (el título sí se parte; --ya lo sigue).
+      if (pre) root.querySelectorAll('.cnt:not([data-contado])').forEach(el => { el.dataset.contado = 'fin'; if (el.dataset.n) el.textContent = el.dataset.n; });
       root.querySelectorAll('.hero-photo .h1').forEach(h => { if (h.querySelector('.w')) return; h.innerHTML = h.textContent.trim().split(/\s+/).map((w, i) => `<span class="w" style="--i:${i}">${esc(w)}</span>`).join(' '); });
-      root.querySelectorAll('.cnt:not([data-contado])').forEach(el => {
+      if (!pre) root.querySelectorAll('.cnt:not([data-contado])').forEach(el => {
         el.dataset.contado = '1';
         const fin = Number(el.dataset.n || el.textContent) || 0, t0 = performance.now(), dur = 1100;
         const paso = t => { const k = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - k, 3); el.textContent = Math.round(fin * e); if (k < 1) requestAnimationFrame(paso); else el.dataset.contado = 'fin'; };
@@ -314,6 +319,7 @@ window.ML = (function () {
       lista.push(...root.querySelectorAll(SEL));
       lista.forEach(el => {
         if (el.dataset.reveal || el.classList.contains('is-in')) return;
+        if (pre && el.getBoundingClientRect().top < innerHeight) return;   // ya se veía antes del JS: no se oculta para volver a aparecer
         const i = [...el.parentElement.children].indexOf(el);
         el.dataset.reveal = '1'; el.style.setProperty('--d', Math.min(i, 9) * 55 + 'ms'); io.observe(el);
       });
@@ -326,14 +332,16 @@ window.ML = (function () {
 
   function shell(section, opts) {
     opts = opts || {};
-    document.body.insertAdjacentHTML('afterbegin', header(section, !!opts.dir));
     const main = document.getElementById('main');
+    const pre = main.hasAttribute('data-prerender');
+    if (pre) document.querySelectorAll('body > a.skip, body > .ml-header, body > footer.site-footer').forEach(e => e.remove());
+    document.body.insertAdjacentHTML('afterbegin', header(section, !!opts.dir));
     main.classList.add('wrap', 'ml-layout');
     const A = anunciantes(opts);
     main.innerHTML = (opts.dir ? sidebarDir(opts.sector, A.items.slice(4)) : sidebar(A.items.slice(4))) + `<div class="ml-main" id="content"></div>` + aside(A);
     document.body.insertAdjacentHTML('beforeend', footer());
     R.header(); R.dropdowns();
-    efectos();
+    efectos(pre);
     // El lateral nace cerrado en móvil y sin su summary en escritorio: al crecer la ventana hay que abrirlo.
     matchMedia('(max-width: 800px)').addEventListener('change', e => { if (!e.matches) document.querySelectorAll('.ml-side details').forEach(d => { d.open = true; }); });
     /* La cabecera se pinta antes de que /api/auth conteste: el botón de cuenta

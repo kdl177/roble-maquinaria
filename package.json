@@ -12,6 +12,7 @@
     "pg": "^8.23.0"
   },
   "scripts": {
+    "prerender": "python scripts/prerender.py",
     "test": "node scripts/qa-panel-api.mjs && node scripts/qa-guardadas.mjs && node scripts/qa-reclasifica.mjs && node scripts/qa-subir.mjs",
     "sitemap": "node scripts/sitemap.mjs"
   }

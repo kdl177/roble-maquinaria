@@ -164,8 +164,9 @@ directorio (altas, empresas, productos, categorías, contenidos, usuarios, confi
 **Decidido:** la web nueva sustituye a producción, conservando su servidor.
 
 **Pendiente de decidir:**
-- Cómo se pinta el HTML. Hoy lo genera JavaScript en el navegador. Recomendado: generarlo en un paso
-  previo para buscadores y primer pintado.
+- ~~Cómo se pinta el HTML~~ (decidido el 14-10): las 9 páginas fijas se generan antes con
+  `npm run prerender` (`hardening.md` §43). Las fichas con `?id` siguen en el navegador hasta que se decidan las URL
+  limpias.
 - URLs limpias. Hay propuesta escrita: el identificador al final, por ejemplo
   `/empresas/airmatic-madera-173/`.
 
@@ -193,6 +194,8 @@ sesiones sobre el mismo repositorio.
 - No tocar `Proyectos/` ni usar la CLI de Vercel en el proyecto `maqdemad`.
 - No hablar de precios ni de pagos: los lleva otra persona.
 - Editar antes que crear archivos. No refactorizar lo que no se toca.
+
+**Antes de desplegar:** `npm run prerender` (regenera el HTML de las 9 páginas fijas) y commit de los HTML.
 
 **Antes de entregar:** comprobar a 390 y 1.440 px como mínimo, que no haya desbordes ni errores de
 consola, y que los enlaces no se rompan. Con cambios de maquetación, medir también Lighthouse.
