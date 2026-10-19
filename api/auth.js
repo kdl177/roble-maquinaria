@@ -29,10 +29,12 @@ const SIN_PASO = {
   rechazada: 'Esta cuenta no ha sido autorizada.',
   suspendida: 'Esta cuenta está suspendida.',
 };
-async function puertaCerrada(userId, email) {
+async function puertaCerrada(userId, email, rol) {
   if (esAdmin(email)) return null;
   const [e] = await db()`SELECT estado FROM empresas WHERE id = ${userId}`;
-  return e ? SIN_PASO[e.estado] || null : null;
+  // Una cuenta de empresa sin ficha (un alta que se quedó a medias) no ha pasado por moderación: pendiente.
+  if (!e) return rol === 'empresa' ? SIN_PASO.pendiente : null;
+  return SIN_PASO[e.estado] || null;
 }
 
 function lee(req, nombre) {
@@ -54,7 +56,7 @@ async function usuarioDeSesion(req) {
     FROM sesiones s JOIN usuarios u ON u.id = s.user_id LEFT JOIN empresas em ON em.id = u.id
     WHERE s.token = ${token} AND s.expira > now() AND u.eliminada IS NULL`;
   const u = filas[0]; if (!u) return null;
-  if (!esAdmin(u.email) && SIN_PASO[u.estado_empresa]) return null;
+  if (!esAdmin(u.email) && (SIN_PASO[u.estado_empresa] || (u.rol === 'empresa' && !u.estado_empresa))) return null;
   delete u.estado_empresa;
   return u;
 }

@@ -1401,3 +1401,50 @@ menú móvil tras el repintado; suites `efectos`, `pedir`, `local`, `nombres`, `
 **Regla nueva:** antes de cada `vercel deploy --prod`, `npm run prerender` (y commit de los HTML). Si se despliega sin
 regenerar, la web funciona igual pero enseña el markup viejo hasta que carga el JS: un salto visible si ha cambiado
 una plantilla de `ml.js` o `roble.js`.
+
+## 44. Revisión del socio del 16 de octubre: 3 fallos medios y 5 bajos (16 de octubre de 2026)
+
+Todo corregido y desplegado; banco nuevo `scripts/qa-sesion.mjs` (14 casos, base simulada) dentro de `npm test`.
+
+- **El login delataba qué correos existen.** El «hash falso» con el que se comparaba cuando el correo no existía no
+  tenía formato bcrypt, así que `bcrypt.compare` salía al instante: 0 ms sin cuenta, ~90 ms con cuenta. Ahora es un hash
+  real (coste 10, como los de la base) de una cadena aleatoria, calculado en el arranque de la función. En el banco,
+  mediana 63 ms frente a 64 ms; en producción 301 frente a 383 ms (ruido de red; antes la diferencia era el bcrypt).
+- **El alta no era atómica.** Cuenta, ficha de empresa y membresía eran tres inserciones sueltas; si fallaba la
+  segunda quedaba una cuenta sin ficha, y `puertaCerrada` la dejaba entrar sin moderación. Ahora es UNA sentencia
+  (`WITH u AS (INSERT … RETURNING) INSERT INTO empresas … INSERT INTO membresias …`) y, además, `auth.js` trata una
+  cuenta de empresa sin ficha como pendiente, al entrar y al leer la sesión. Comprobado antes de activarlo: las 146
+  empresas publicadas tienen ficha (`origen: legacy`); nadie se queda fuera.
+- **Guardadas que se quitaban reaparecían al entrar desde otro dispositivo**, porque al entrar el navegador subía
+  toda su lista y el servidor solo suma. Ahora el navegador anota qué ids están ya en la cuenta (`favSync`) y al entrar
+  sube solo lo guardado sin sesión; el resto lo dicta el servidor. Y **las guardadas no pasan al siguiente usuario del
+  mismo navegador**: al salir se borran, y si entra otra cuenta (`favUser` distinto) se descartan antes de sincronizar.
+- **Hasta 200 inserciones por página con sesión.** La fusión hacía un `INSERT` por id en bucle en cada carga. Ahora el
+  navegador no manda nada si no hay novedades (hace un `GET`) y, cuando manda, el servidor lo mete en una sola sentencia
+  (`INSERT … SELECT … WHERE p.id = ANY($ids) … ON CONFLICT DO NOTHING`), que deja fuera los ids inexistentes sin violar
+  la clave foránea y respeta el tope con `LIMIT`. El banco `qa-guardadas` simula la forma nueva.
+- **Fechas del día anterior entre las 0:00 y las 2:00.** `alta` y `fecha` de `/api/datos.js` se recortaban del ISO en
+  UTC; ahora se formatean en `Europe/Madrid`. La fecha de las solicitudes locales, igual, en el navegador.
+- **12 funciones de 12.** `registro.js` y `password.js` pasan a `_registro.js` y `_password.js` (módulos internos) y
+  `vercel.json` reescribe `/api/registro` → `/api/sesion?via=registro` y `/api/password` → `/api/sesion?via=password`;
+  `sesion.js` los despacha (require perezoso, sin ciclo). Las URL antiguas siguen valiendo: nada cambia en
+  `acceso.html`. Quedan **10 funciones**.
+
+Comprobado en producción: `/api/registro` sin datos → 400 del validador de alta; `/api/password?a=olvide` → 400 «Falta
+el correo»; `?a=x` → 400; `/api/sesion` sin datos → 400; fechas `AAAA-MM-DD`; suites `efectos`, `local` y `pedir` con
+0 fallos. QA local 127/127. `autorizacion_check.py` (scratchpad) tiene dos comprobaciones caducas (espera el botón de
+WhatsApp visible en los paquetes, que desde §35 va dentro de «Pedir») y una que exige la contraseña de administración.
+
+## 45. Correo sin dominio propio: envío por SMTP (PR #2 del socio, 15 de octubre; fusionado el 19)
+
+Resend no exige plan de pago para escribir a cualquiera (gratis: 3.000 al mes, 100 al día); exige verificar un dominio
+propio, y `vercel.app` no se puede. Hasta tenerlo, con `onboarding@resend.dev` solo llega correo a la cuenta dueña de
+Resend: códigos de contraseña, avisos de contacto y de moderación no le llegaban a nadie más. `api/_correo.js` admite
+ahora SMTP (`nodemailer`): con `SMTP_USER` y `SMTP_PASS` puestas en Vercel se envía por SMTP —por defecto Gmail con
+contraseña de aplicación, 500 al día— y si no, por Resend como antes. Al verificar el dominio se quitan las dos
+variables y vuelve a Resend sin tocar código. El socio lo comprobó con un envío real (`enviaCodigo` por Gmail SMTP,
+recepción en bandeja, remitente «ROBLE»); sin variables responde `sin-clave`; con solo `RESEND_API_KEY` va a Resend.
+
+Para activarlo hace falta una cuenta de Gmail del proyecto con verificación en dos pasos y contraseña de aplicación, y
+las dos variables en Vercel (Production) seguidas de un despliegue: lo lleva el propietario. Mientras no estén, la web
+funciona igual y no envía correos. (En el PR esta nota era el §43; aquí es el 45 porque §43 y §44 ya existían.)

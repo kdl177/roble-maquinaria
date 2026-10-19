@@ -36,6 +36,10 @@
       ]
     }
   ],
+  "rewrites": [
+    { "source": "/api/registro", "destination": "/api/sesion?via=registro" },
+    { "source": "/api/password", "destination": "/api/sesion?via=password" }
+  ],
   "redirects": [
     {
       "source": "/categorias.html",

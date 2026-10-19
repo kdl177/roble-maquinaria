@@ -1,7 +1,7 @@
 /* Alta de cuenta en la web nueva.
  *
- *   POST /api/registro  { email, password, nombre, rol: 'empresa', empresa }
- *   → 201 + Set-Cookie roble_sesion + identidad (user, companies, permissions)
+ *   POST /api/registro  { email, password, nombre, rol: 'empresa', empresa }   → 201 { ok, pendiente: true }
+ *   (la URL la reescribe vercel.json a /api/sesion?via=registro: módulo interno, no cuenta como función)
  *
  * Mismas reglas, mismo coste de bcrypt y misma tabla `usuarios` que el sistema
  * actual: la cuenta creada aquí vale en los dos sitios. Además crea la ficha de
@@ -15,8 +15,8 @@
 
 const bcrypt = require('bcryptjs');
 const { db, init, registra } = require('./_esquema');
-const { identidad, COOKIE, esAdmin } = require('./auth');
-const { abreSesion, cookieSesion, cuerpo } = require('./sesion');
+const { esAdmin } = require('./auth');
+const { cuerpo } = require('./sesion');
 
 const COSTE_BCRYPT = 10;                            // el mismo que producción
 const RE_EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/;    // el mismo que producción
@@ -74,30 +74,27 @@ module.exports = async function handler(req, res) {
     if (existe.length) { res.status(409).json({ error: 'Ya hay una cuenta con ese email.', codigo: 'duplicado' }); return; }
 
     const hash = await bcrypt.hash(password, COSTE_BCRYPT);
+    /* Cuenta, ficha de empresa y membresía en UNA sentencia: o se crean las tres o ninguna. Antes eran tres
+       inserciones sueltas y, si fallaba la segunda, quedaba una cuenta sin ficha que entraba sin pasar por
+       moderación (ahora además auth.js la trata como pendiente). */
     const [u] = await sql`
-      INSERT INTO usuarios (email, password_hash, nombre, rol, empresa)
-      VALUES (${email}, ${hash}, ${nombre}, ${rol}, ${empresa})
-      RETURNING id, email, nombre, rol, empresa`;
-
-    if (rol === 'empresa') {
-      await sql`
+      WITH u AS (
+        INSERT INTO usuarios (email, password_hash, nombre, rol, empresa)
+        VALUES (${email}, ${hash}, ${nombre}, ${rol}, ${empresa})
+        RETURNING id, email, nombre, rol, empresa),
+      e AS (
         INSERT INTO empresas (id, nombre, estado, origen)
-        VALUES (${u.id}, ${empresa || nombre}, 'pendiente', 'alta')
-        ON CONFLICT (id) DO NOTHING`;
-      await sql`
+        SELECT id, ${empresa || nombre}, 'pendiente', 'alta' FROM u
+        ON CONFLICT (id) DO NOTHING),
+      m AS (
         INSERT INTO membresias (user_id, empresa_id, rol, estado)
-        VALUES (${u.id}, ${u.id}, 'propietario', 'activa')
-        ON CONFLICT (user_id, empresa_id) DO NOTHING`;
-    }
-    await registra({ user_id: u.id, empresa_id: rol === 'empresa' ? u.id : null, accion: 'cuenta.alta', datos: { rol }, ip });
+        SELECT id, id, 'propietario', 'activa' FROM u
+        ON CONFLICT (user_id, empresa_id) DO NOTHING)
+      SELECT id, email, nombre, rol, empresa FROM u`;
+    await registra({ user_id: u.id, empresa_id: u.id, accion: 'cuenta.alta', datos: { rol }, ip });
 
     // La cuenta existe, pero no abre sesión: entra cuando administración la autorice desde Moderación.
-    if (rol === 'empresa') { res.status(201).json({ ok: true, pendiente: true }); return; }
-
-    const { token, expira } = await abreSesion(u.id);
-    res.setHeader('Set-Cookie', cookieSesion(token, expira));
-    const id = await identidad({ headers: { cookie: `${COOKIE}=${token}` } });
-    res.status(201).json({ ok: true, ...id });
+    res.status(201).json({ ok: true, pendiente: true });
   } catch (err) {
     // Dos altas simultáneas con el mismo correo: la segunda choca con el UNIQUE.
     if (err.code === '23505' || /duplicate key/i.test(err.message || '')) {

@@ -1,5 +1,6 @@
 /* Recuperación de contraseña en la web nueva.
  *
+ *   (la URL la reescribe vercel.json a /api/sesion?via=password: módulo interno, no cuenta como función)
  *   POST /api/password?a=olvide  { email }                  → código por correo (una hora, un uso)
  *   POST /api/password?a=nueva   { email, codigo, nueva }   → cambia la contraseña y abre sesión
  *
@@ -76,7 +77,7 @@ async function nueva(req, res, ip) {
   await init();
   const sql = db();
   const generico = { error: 'El código no es válido o ha caducado.' };
-  const usuarios = await sql`SELECT id FROM usuarios WHERE email = ${email} AND eliminada IS NULL`;
+  const usuarios = await sql`SELECT id, rol FROM usuarios WHERE email = ${email} AND eliminada IS NULL`;
   if (!usuarios.length) { res.status(400).json(generico); return; }
 
   const pendientes = await sql`
@@ -97,7 +98,7 @@ async function nueva(req, res, ip) {
   await registra({ user_id: usuarios[0].id, accion: 'password.cambiada', ip });
 
   // Una cuenta pendiente, rechazada o suspendida cambia la contraseña pero no entra (§34).
-  const cierre = await puertaCerrada(usuarios[0].id, email);
+  const cierre = await puertaCerrada(usuarios[0].id, email, usuarios[0].rol);
   if (cierre) { res.status(200).json({ ok: true, aviso: cierre }); return; }
 
   const { token, expira } = await abreSesion(usuarios[0].id);

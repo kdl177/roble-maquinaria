@@ -2,6 +2,8 @@
  *
  *   POST   /api/sesion  { email, password }  → Set-Cookie roble_sesion + identidad
  *   DELETE /api/sesion                        → borra la sesión y retira la cookie
+ *   /api/registro y /api/password se reescriben a /api/sesion?via=registro|password (vercel.json) y se atienden
+ *   desde _registro.js y _password.js: así son 10 funciones y no 12, el tope del plan.
  *
  * Mismo mecanismo que el sistema actual, sobre la MISMA tabla `sesiones`:
  * token hex de 32 bytes, 30 días, cookie HttpOnly/Secure/SameSite=Lax. Así hay
@@ -42,9 +44,10 @@ const cookieSesion = (token, expira) =>
   `${COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Lax; Expires=${expira.toUTCString()}`;
 const cookieBorrada = () => `${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
 
-// Mismo hash falso que producción: se compara siempre, exista o no la cuenta,
-// para que el tiempo de respuesta no delate qué correos están registrados.
-const HASH_FALSO = '$2b$10$invalidinvalidinvalidinvalidinvalidinvalidinvalidinvalidin';
+// Hash de verdad (coste 10, como los reales) de una contraseña aleatoria: se compara siempre, exista o no la
+// cuenta, para que el tiempo de respuesta no delate qué correos están registrados. Antes era una cadena sin formato
+// bcrypt y la comparación salía al instante: 0 ms sin cuenta frente a ~90 ms con cuenta.
+const HASH_FALSO = bcrypt.hashSync(crypto.randomBytes(24).toString('hex'), 10);
 
 /* Lee el JSON del cuerpo respetando UTF-8: Vercel puede entregarlo como
    objeto, string o Buffer, y un Buffer sin decodificar rompe los acentos. */
@@ -80,7 +83,7 @@ async function entra(req, res) {
   await init();
   const sql = db();
   // Una cuenta borrada (eliminada) no entra: antes abría sesión y el panel la daba por no iniciada.
-  const filas = await sql`SELECT id, password_hash FROM usuarios WHERE email = ${email} AND eliminada IS NULL`;
+  const filas = await sql`SELECT id, password_hash, rol FROM usuarios WHERE email = ${email} AND eliminada IS NULL`;
   const ok = await bcrypt.compare(clave, filas[0]?.password_hash || HASH_FALSO);
 
   if (!filas.length || !ok) {
@@ -90,7 +93,7 @@ async function entra(req, res) {
     return;
   }
 
-  const cierre = await puertaCerrada(filas[0].id, email);
+  const cierre = await puertaCerrada(filas[0].id, email, filas[0].rol);
   if (cierre) {
     await registra({ user_id: filas[0].id, accion: 'sesion.no_autorizada', ip });
     res.status(403).json({ error: cierre, codigo: 'no_autorizada' });
@@ -126,6 +129,10 @@ async function sale(req, res) {
 module.exports = async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   try {
+    // /api/registro y /api/password llegan aquí reescritos (vercel.json): el plan admite 12 funciones y estaban al tope.
+    const via = String(req.query?.via || '');
+    if (via === 'registro') return await require('./_registro')(req, res);
+    if (via === 'password') return await require('./_password')(req, res);
     if (req.method === 'POST') return await entra(req, res);
     if (req.method === 'DELETE') return await sale(req, res);
     res.status(405).json({ error: 'Método no permitido.' });

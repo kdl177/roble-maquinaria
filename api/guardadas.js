@@ -78,7 +78,18 @@ module.exports = async function handler(req, res) {
       // Los ids que ya no existan se saltan sin error, para no abortar el resto.
       const ids = [...new Set((cuerpo(req).ids || []).map(idDe).filter(Boolean))].slice(0, MAX);
       let anadidas = 0;
-      for (const id of ids) if ((await guarda(sql, usuario.id, id)) === 'nueva') anadidas++;
+      if (ids.length) {
+        /* Una sentencia para todas (antes, una por id: hasta 200 inserciones en cada página con sesión). El JOIN con
+           productos deja fuera los ids que ya no existen sin violar la clave foránea; el LIMIT respeta el tope. */
+        const [{ n }] = await sql`SELECT COUNT(*)::int AS n FROM maquinas_guardadas WHERE user_id = ${usuario.id}`;
+        const nuevas = await sql`
+          INSERT INTO maquinas_guardadas (user_id, producto_id)
+          SELECT ${usuario.id}::int, p.id FROM productos p WHERE p.id = ANY(${ids}::int[])
+          ORDER BY array_position(${ids}::int[], p.id) LIMIT ${Math.max(0, MAX - n)}
+          ON CONFLICT (user_id, producto_id) DO NOTHING
+          RETURNING producto_id`;
+        anadidas = nuevas.length;
+      }
       res.status(200).json({ ids: await lista(sql, usuario.id), anadidas });
       return;
     }

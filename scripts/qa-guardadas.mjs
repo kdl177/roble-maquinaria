@@ -21,6 +21,11 @@ function sqlFalso(strings, ...v) {
   if (/FROM information_schema\.tables/.test(t)) return Promise.resolve([]);
   if (/SELECT producto_id FROM maquinas_guardadas/.test(t)) return Promise.resolve(de(v[0]).map(producto_id => ({ producto_id })));
   if (/COUNT\(\*\)::int AS n FROM maquinas_guardadas/.test(t)) return Promise.resolve([{ n: de(v[0]).length }]);
+  if (/INSERT INTO maquinas_guardadas .*ANY\(/.test(t)) {       // la fusión: todas en una sentencia
+    const [u, arr] = v, out = [];
+    for (const p of arr) { if (!EXISTEN.has(p) || de(u).includes(p)) continue; filas.set(u, [p, ...de(u)]); out.push({ producto_id: p }); }
+    return Promise.resolve(out);
+  }
   if (/INSERT INTO maquinas_guardadas/.test(t)) {
     const [u, p] = v;
     if (!EXISTEN.has(p)) { const e = new Error('violates foreign key constraint'); e.code = '23503'; return Promise.reject(e); }

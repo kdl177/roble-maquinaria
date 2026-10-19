@@ -16,6 +16,8 @@
  * contacto si la empresa lo puso.
  */
 
+// Fecha AAAA-MM-DD en hora de Madrid: en UTC, lo creado entre las 0:00 y las 2:00 salía con el día anterior.
+const dia = d => d ? new Date(d).toLocaleDateString('sv-SE', { timeZone: 'Europe/Madrid' }) : null;
 const { db, init } = require('./_esquema');
 const { usuarioDeSesion, esAdmin } = require('./auth');
 const { empresasDe } = require('./_permisos');
@@ -93,7 +95,7 @@ function aEmpresa(e, nProductos) {
     // Moderación (tabla empresas): la web pública solo muestra las activas.
     estado: e.estado_mod || 'activa',
     origen: e.origen || 'legacy',
-    alta: e.alta ? new Date(e.alta).toISOString().slice(0, 10) : null,
+    alta: dia(e.alta),
     motivo: e.motivo || '',
   };
 }
@@ -110,7 +112,7 @@ function aProducto(p) {
     empresa_id: p.user_id,
     empresa: p.empresa || '',
     // El driver devuelve Date para timestamptz; String(Date) daría "Sat Sep 05".
-    fecha: p.creada ? new Date(p.creada).toISOString().slice(0, 10) : null,
+    fecha: dia(p.creada),
   };
 }
 

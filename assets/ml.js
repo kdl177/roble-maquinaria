@@ -44,26 +44,33 @@ window.ML = (function () {
     esFav: id => (extras().favoritos || []).includes(Number(id)),
     toggleFav(id) {
       const x = extras(); id = Number(id); x.favoritos = x.favoritos || [];
-      const i = x.favoritos.indexOf(id); if (i >= 0) x.favoritos.splice(i, 1); else x.favoritos.unshift(id); saveExtras(x);
+      const i = x.favoritos.indexOf(id); if (i >= 0) x.favoritos.splice(i, 1); else x.favoritos.unshift(id);
       const on = i < 0;
       if (auth.listo && auth.user) {
+        // favSync: lo que ya está en la cuenta. Así, al entrar, solo se sube lo guardado sin sesión.
+        x.favSync = (x.favSync || []).filter(k => k !== id); if (on) x.favSync.unshift(id);
         fetch('/api/guardadas?id=' + id, { method: on ? 'PUT' : 'DELETE', credentials: 'same-origin' }).catch(() => {});
       }
+      saveExtras(x);
       return on;
     },
-    /* Al saber que hay sesión: sube lo local, baja lo de la cuenta, y deja en
-       localStorage la unión. Devuelve si cambió algo, para repintar. */
+    /* Al saber que hay sesión: sube SOLO lo guardado sin cuenta (lo que ya se sincronizó no se reenvía: si se quitó
+       desde otro dispositivo, no vuelve), baja lo de la cuenta y deja en localStorage lo que diga el servidor. Si
+       en este navegador había otra cuenta, sus guardadas se descartan antes. Devuelve si cambió algo, para repintar. */
     async sincronizaFav() {
       if (!auth.listo || !auth.user) return false;
-      const antes = (extras().favoritos || []).slice();
+      const x = extras(), uid = auth.user.id; let cambio = false;
+      if (x.favUser && x.favUser !== uid) { x.favoritos = []; x.favSync = []; x.favUser = uid; saveExtras(x); cambio = true; }
+      const antes = (x.favoritos || []).slice(), nuevos = antes.filter(id => !(x.favSync || []).includes(id));
       try {
-        const r = await fetch('/api/guardadas', { method: 'POST', credentials: 'same-origin',
-          headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: antes }) });
-        if (!r.ok) return false;
+        const r = nuevos.length
+          ? await fetch('/api/guardadas', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids: nuevos }) })
+          : await fetch('/api/guardadas', { credentials: 'same-origin', cache: 'no-store' });
+        if (!r.ok) return cambio;
         const { ids } = await r.json();
-        const x = extras(); x.favoritos = ids; saveExtras(x);
-        return ids.length !== antes.length || ids.some((v, k) => v !== antes[k]);
-      } catch (e) { return false; }
+        x.favoritos = ids; x.favSync = ids.slice(); x.favUser = uid; saveExtras(x);
+        return cambio || ids.length !== antes.length || ids.some((v, k) => v !== antes[k]);
+      } catch (e) { return cambio; }
     },
     pedidos: () => extras().pedidos || [],
     setPedido(id, patch) { const x = extras(); const p = (x.pedidos || []).find(p => p.id === id); if (p) Object.assign(p, patch); saveExtras(x); },
@@ -95,8 +102,9 @@ window.ML = (function () {
       .then(j => { if (j) { auth.user = j.user; auth.companies = j.companies || []; auth.current = j.currentCompany; auth.permissions = j.permissions || []; } })
       .catch(() => {}),
   ]).then(() => { auth.listo = true; return auth; });
-  const salir = destino => fetch('/api/sesion', { method: 'DELETE', credentials: 'same-origin' })
-    .catch(() => {}).finally(() => { location.href = destino || 'index.html'; });
+  // Al salir, las guardadas de la cuenta se van con ella: el siguiente en este navegador no las hereda.
+  const salir = destino => { const x = extras(); delete x.favoritos; delete x.favSync; delete x.favUser; saveExtras(x);
+    return fetch('/api/sesion', { method: 'DELETE', credentials: 'same-origin' }).catch(() => {}).finally(() => { location.href = destino || 'index.html'; }); };
   const elegirEmpresa = id => fetch('/api/auth?empresa=' + encodeURIComponent(id), { method: 'POST', credentials: 'same-origin' })
     .then(r => r.ok).catch(() => false);
 

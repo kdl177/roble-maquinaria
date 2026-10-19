@@ -14,7 +14,7 @@
   },
   "scripts": {
     "prerender": "python scripts/prerender.py",
-    "test": "node scripts/qa-panel-api.mjs && node scripts/qa-guardadas.mjs && node scripts/qa-reclasifica.mjs && node scripts/qa-subir.mjs",
+    "test": "node scripts/qa-panel-api.mjs && node scripts/qa-guardadas.mjs && node scripts/qa-reclasifica.mjs && node scripts/qa-subir.mjs && node scripts/qa-sesion.mjs",
     "sitemap": "node scripts/sitemap.mjs"
   }
 }
