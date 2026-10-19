@@ -34,6 +34,7 @@ Producción: https://roble-maquinaria.vercel.app
 | `ROBLE_DATABASE_URL` | Postgres (Neon). Rol `roble_app`, mínimos privilegios. |
 | `ROBLE_ADMIN_EMAILS` | Correos con acceso a la administración, separados por comas. |
 | `RESEND_API_KEY` | Correos transaccionales (códigos, avisos). Sin ella, la web funciona y no envía correos. |
+| `SMTP_USER`, `SMTP_PASS` | Alternativa a Resend mientras no haya dominio propio verificado: cuenta SMTP (por defecto Gmail, con contraseña de aplicación; 500 correos al día). Si están puestas, se envía por SMTP. `SMTP_HOST`/`SMTP_PORT` opcionales. |
 
 El almacén de fotos de anuncios es un Blob de Vercel ligado al proyecto.
 

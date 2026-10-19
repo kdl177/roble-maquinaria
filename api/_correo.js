@@ -9,15 +9,43 @@
  *                      cuenta de Resend.
  *   APP_URL          — dirección pública de esta web, para los enlaces de los
  *                      correos. Por defecto, la de Vercel.
+ *
+ * Sin dominio propio, Resend solo escribe a su propia cuenta. Mientras tanto se
+ * puede enviar por SMTP (por ejemplo, una cuenta de Gmail del proyecto con
+ * contraseña de aplicación: 500 correos al día). Si SMTP_USER y SMTP_PASS están
+ * puestas, se usa SMTP y no Resend; al tener dominio verificado, se quitan.
+ *   SMTP_USER, SMTP_PASS — cuenta y contraseña de aplicación.
+ *   SMTP_HOST, SMTP_PORT — por defecto smtp.gmail.com y 465.
  */
 
 const REMITENTE = process.env.REMITENTE_EMAIL || 'Roble <onboarding@resend.dev>';
 const APP_URL = (process.env.APP_URL || 'https://roble-maquinaria.vercel.app').replace(/\/+$/, '');
 
-const hayCorreo = () => Boolean(process.env.RESEND_API_KEY);
+const haySmtp = () => Boolean(process.env.SMTP_USER && process.env.SMTP_PASS);
+const hayCorreo = () => haySmtp() || Boolean(process.env.RESEND_API_KEY);
+
+let transporte = null;
+async function enviaSmtp({ para, asunto, html, texto }) {
+  if (!transporte) {
+    const puerto = Number(process.env.SMTP_PORT) || 465;
+    transporte = require('nodemailer').createTransport({
+      host: process.env.SMTP_HOST || 'smtp.gmail.com', port: puerto, secure: puerto === 465,
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    });
+  }
+  try {
+    // Gmail firma con la cuenta autenticada: el remitente es esa cuenta, con el nombre de ROBLE.
+    await transporte.sendMail({ from: { name: 'ROBLE', address: process.env.SMTP_USER }, to: para, subject: asunto, html, text: texto });
+    return { enviado: true };
+  } catch (err) {
+    console.error(JSON.stringify({ evt: 'correo_smtp_error', msg: err.message }));
+    return { enviado: false, motivo: 'smtp' };
+  }
+}
 
 async function envia({ para, asunto, html, texto }) {
   if (!hayCorreo()) return { enviado: false, motivo: 'sin-clave' };
+  if (haySmtp()) return enviaSmtp({ para, asunto, html, texto });
   try {
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
