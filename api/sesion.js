@@ -22,6 +22,32 @@ const { identidad, leeCookie, COOKIE, puertaCerrada } = require('./auth');
 
 const DIAS_SESION = 30;
 
+/* Enlace de acceso directo al panel de administración (/acceso-admin?k=…), para enseñar la demo sin escribir
+   contraseña. Aquí solo está el hash SHA-256 de la llave; la llave va en el enlace que se le da al cliente. Abre
+   sesión con la primera cuenta de ROBLE_ADMIN_EMAILS. Para anularlo basta con cambiar o vaciar este hash. */
+const LLAVE_ADMIN = '63b5240d0da6956b72d96e35e4f70318de6586467efe52033c80060011b28867';
+const FALLOS_LLAVE = new Map();   // ponytail: por instancia, como el resto de límites
+
+async function llave(req, res) {
+  const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || 'anon';
+  const f = FALLOS_LLAVE.get(ip) || 0;
+  const k = String(req.query?.k || '');
+  const dada = crypto.createHash('sha256').update(k).digest();
+  const buena = Buffer.from(LLAVE_ADMIN, 'hex');
+  if (f >= 10 || !LLAVE_ADMIN || !k || !crypto.timingSafeEqual(dada, buena)) {
+    FALLOS_LLAVE.set(ip, f + 1);
+    res.statusCode = 302; res.setHeader('Location', '/acceso.html'); res.end(); return;
+  }
+  const correos = String(process.env.ROBLE_ADMIN_EMAILS || '').toLowerCase().split(',').map(x => x.trim()).filter(Boolean);
+  await init();
+  const [u] = correos.length ? await db()`SELECT id FROM usuarios WHERE email = ANY(${correos}) AND eliminada IS NULL ORDER BY id LIMIT 1` : [];
+  if (!u) { res.statusCode = 302; res.setHeader('Location', '/acceso.html'); res.end(); return; }
+  const { token, expira } = await abreSesion(u.id);
+  await registra({ user_id: u.id, accion: 'sesion.llave', ip });
+  res.setHeader('Set-Cookie', cookieSesion(token, expira));
+  res.statusCode = 302; res.setHeader('Location', '/admin-directorio/index.html'); res.end();
+}
+
 /* ponytail: limitador en memoria por instancia; en serverless se vacía con
    cada arranque en frío. Frena la fuerza bruta casual, no la distribuida.
    Si hiciera falta de verdad, contador en BD (tabla propia, por correo+IP). */
@@ -133,6 +159,7 @@ module.exports = async function handler(req, res) {
     const via = String(req.query?.via || '');
     if (via === 'registro') return await require('./_registro')(req, res);
     if (via === 'password') return await require('./_password')(req, res);
+    if (via === 'llave' && req.method === 'GET') return await llave(req, res);
     if (req.method === 'POST') return await entra(req, res);
     if (req.method === 'DELETE') return await sale(req, res);
     res.status(405).json({ error: 'Método no permitido.' });

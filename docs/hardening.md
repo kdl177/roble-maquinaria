@@ -1448,3 +1448,15 @@ recepción en bandeja, remitente «ROBLE»); sin variables responde `sin-clave`;
 Para activarlo hace falta una cuenta de Gmail del proyecto con verificación en dos pasos y contraseña de aplicación, y
 las dos variables en Vercel (Production) seguidas de un despliegue: lo lleva el propietario. Mientras no estén, la web
 funciona igual y no envía correos. (En el PR esta nota era el §43; aquí es el 45 porque §43 y §44 ya existían.)
+
+## 46. Enlace de acceso directo al panel de administración (20 de octubre de 2026)
+
+El propietario pidió que el cliente entre al panel de administración sin escribir correo ni contraseña. Quitar la
+protección del todo habría dejado moderar o borrar las 146 empresas reales a cualquiera, así que se hizo con un
+enlace: `/acceso-admin?k=<llave>` (reescrito a `/api/sesion?via=llave`, sin función nueva) abre una sesión de
+administración con la primera cuenta de `ROBLE_ADMIN_EMAILS` y lleva a `/admin-directorio/index.html`. En el código
+solo está el hash SHA-256 de la llave (comparación en tiempo constante); la llave va únicamente en el enlace que se
+le da al cliente. Llave mala o vacía → `/acceso.html` sin cookie; 10 fallos por IP y se deja de comprobar. Para
+anularlo basta con cambiar o vaciar `LLAVE_ADMIN` en `api/sesion.js` y desplegar. Comprobado en producción: sin llave
+y con llave mala → acceso.html; con la buena → panel y Moderación; otro navegador sin el enlace sigue viendo «Este
+panel es solo para el equipo de ROBLE». `qa-sesion` 17 casos (el de la llave buena, con `LLAVE_ADMIN` en el entorno).

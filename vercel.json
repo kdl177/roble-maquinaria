@@ -38,7 +38,8 @@
   ],
   "rewrites": [
     { "source": "/api/registro", "destination": "/api/sesion?via=registro" },
-    { "source": "/api/password", "destination": "/api/sesion?via=password" }
+    { "source": "/api/password", "destination": "/api/sesion?via=password" },
+    { "source": "/acceso-admin", "destination": "/api/sesion?via=llave" }
   ],
   "redirects": [
     {

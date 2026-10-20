@@ -29,6 +29,7 @@ function sqlFalso(strings, ...v) {
     return Promise.resolve([u]);
   }
   if (/FROM sesiones s JOIN usuarios u/.test(t)) return Promise.resolve([]);
+  if (/SELECT id FROM usuarios WHERE email = ANY/.test(t)) return Promise.resolve([{ id: 1 }]);
   throw new Error('consulta no simulada: ' + t.slice(0, 90));
 }
 const esquema = require('../api/_esquema.js');
@@ -38,7 +39,7 @@ esquema.registra = async () => {};   // la auditoría usa su propia conexión: a
 for (const k of Object.keys(require.cache)) if (/[\\/]api[\\/](auth|sesion|_registro|_password|_permisos)\.js$/.test(k)) delete require.cache[k];
 const sesion = require('../api/sesion.js');
 
-function res() { const r = { code: 0, body: null, h: {} }; r.setHeader = (k, x) => { r.h[k] = x; }; r.status = c => { r.code = c; return r; }; r.json = b => { r.body = b; return r; }; return r; }
+function res() { const r = { code: 0, body: null, h: {}, statusCode: 0 }; r.end = () => { r.code = r.statusCode; }; r.setHeader = (k, x) => { r.h[k] = x; }; r.status = c => { r.code = c; return r; }; r.json = b => { r.body = b; return r; }; return r; }
 const req = (method, query = {}, body = {}, ip = '1.2.3.4') => ({ method, query, body, headers: { 'x-forwarded-for': ip } });
 let fallos = 0, total = 0;
 async function caso(t, rq, esperado, cuerpoOk) {
@@ -61,6 +62,12 @@ const conCuenta = [], sinCuenta = [];
 for (let i = 0; i < 5; i++) { conCuenta.push(await tiempo(req('POST', {}, { email: 'ana@x.es', password: 'otra' }, '7.7.7.' + i))); sinCuenta.push(await tiempo(req('POST', {}, { email: 'nadie' + i + '@x.es', password: 'otra' }, '8.8.8.' + i))); }
 { total++; const a = med(conCuenta), b = med(sinCuenta), ok = b > a * 0.5 && a > 20;
   if (!ok) fallos++; console.log(`  ${ok ? 'OK   ' : 'FALLA'} ${'sin cuenta tarda como con cuenta (mediana)'.padEnd(62)} -> ${Math.round(a)} ms frente a ${Math.round(b)} ms`); }
+
+console.log('\n/acceso-admin (via sesion)');
+process.env.ROBLE_ADMIN_EMAILS = 'admin@x.es';
+await caso('sin llave: a acceso.html, sin cookie', req('GET', { via: 'llave' }), 302, (b, r) => r.h.Location === '/acceso.html' && !r.h['Set-Cookie']);
+await caso('llave mala: a acceso.html, sin cookie', req('GET', { via: 'llave', k: 'otra' }), 302, (b, r) => r.h.Location === '/acceso.html' && !r.h['Set-Cookie']);
+if (process.env.LLAVE_ADMIN) await caso('llave buena: cookie y al panel', req('GET', { via: 'llave', k: process.env.LLAVE_ADMIN }, {}, '6.6.6.6'), 302, (b, r) => r.h.Location === '/admin-directorio/index.html' && /roble_sesion=/.test(r.h['Set-Cookie']));
 
 console.log('\n/api/registro (via sesion)');
 await caso('sin datos: 400 del validador de registro', req('POST', { via: 'registro' }, {}), 400, b => /email/.test(b.error));
