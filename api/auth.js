@@ -21,6 +21,9 @@ const COOKIE_EMPRESA = 'roble_empresa'; // cuál tengo seleccionada
 const ADMINS = new Set(
   String(process.env.ROBLE_ADMIN_EMAILS || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean));
 const esAdmin = email => ADMINS.has(String(email || '').toLowerCase().trim());
+// Nombre con el que se ve la cuenta de administración en los paneles (lo pidió el propietario, 20-10). El rol de la
+// app no puede cambiar usuarios.nombre, así que se decide aquí.
+const NOMBRE_ADMIN = 'Jordi';
 
 /* Nadie entra hasta que administración lo autoriza: la ficha de su empresa tiene que estar en
    activa o borrador (se autoriza desde Moderación). Administración entra siempre. */
@@ -84,7 +87,7 @@ async function identidad(req) {
     user: {
       id: usuario.id,
       email: usuario.email,
-      name: usuario.nombre,
+      name: esAdmin(usuario.email) ? NOMBRE_ADMIN : usuario.nombre,
       legacyRole: usuario.rol,
       emailVerified: verificado,
       isAdmin: esAdmin(usuario.email),
